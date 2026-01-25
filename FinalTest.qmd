@@ -1,0 +1,803 @@
+---
+title: "Mobile Units in Texas"
+format:
+  closeread-html:
+    grid:
+      body-width: 1600px
+page-layout: full
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{=html}
+
+<style>
+/* Apply to root element */
+html, body, .quarto-content {
+  scrollbar-width: 90px;           /* Firefox */
+  scrollbar-color: rgba(0,0,0,0.2) rgba(0,0,0,0.1);
+}
+
+/* Webkit browsers */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+.quarto-content::-webkit-scrollbar {
+  width: 90px;
+  height: 0px; /* for horizontal scrollbars */
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+.quarto-content::-webkit-scrollbar-thumb {
+  background-color: rgba(0,0,0,0.6);
+  border-radius: 10px;
+  border: 4px solid rgba(255,255,255,0.2);
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+.quarto-content::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0,0,0,0.8);
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+.quarto-content::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.05);
+  border-radius: 10px;
+}
+</style>
+
+
+
+<style>
+  /* Hide Quarto's built-in title block */
+  header.quarto-title-block { display:none !important; }
+
+  /* Fixed overlay container (sits above all content) */
+  .fixed-hero {
+    position: fixed;
+    inset: 0 auto auto 0; /* top-left corner */
+    width: 100%;
+    z-index: 10000;       /* above maps/tooltips */
+    display: flex;
+    justify-content: center;
+    pointer-events: none; /* don't block map scrolling/zooming */
+  }
+
+  /* The visible title box */
+  .fixed-hero .box {
+    margin: 1rem auto 0.5rem;
+    padding: 0.9rem 1.1rem;
+    background: rgba(10, 18, 35, 0.55);        /* translucent ink */
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 14px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.20);
+    backdrop-filter: blur(6px);                 /* glassy blur */
+    -webkit-backdrop-filter: blur(6px);
+    pointer-events: auto;                       /* links inside are clickable */
+    max-width: min(92vw, 1400px);
+  }
+
+  .fixed-hero h1 {
+    margin: 0;
+    font-weight: 800;
+    letter-spacing: .2px;
+    line-height: 1.05;
+    font-size: clamp(1.6rem, 3.8vw, 2.8rem);
+    background: linear-gradient(90deg,#00b3a4,#7ae0ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .fixed-hero .kicker {
+    margin: .15rem 0 0 0;
+    font-size: clamp(.9rem, 1.8vw, 1.05rem);
+    opacity: .95;
+    color: #e9f7ff;
+  }
+
+  /* Optional: add a subtle accent bar under the title */
+  .fixed-hero h1::after{
+    content:"";
+    display:block;
+    width: 510px; height: 10px;
+    margin-top: 8px; border-radius: 2px;
+    background: linear-gradient(90deg,#f38325,#1ECAD3);
+  }
+
+  /* Keep the overlay tidy on small screens */
+  @media (max-width: 640px){
+    .fixed-hero .box { margin: .6rem auto .4rem; padding: .7rem .85rem; }
+  }
+
+  /* Don’t cover printouts */
+  @media print{
+    .fixed-hero { display:none !important; }
+  }
+</style>
+
+
+```
+
+
+
+```{r}
+# --- data (Texas corridor demo) ---
+center_lng <- -97.3; center_lat <- 31.0
+a <- list(west=-100.5, south=28.3, east=-94.5, north=33.8)
+line_lng <- c(-98.493, -97.743, -97.146, -96.797)
+line_lat <- c( 29.424,  30.267,  31.549,  32.776)
+p_lng <- c(-98.493,-98.125,-97.941,-97.743,-97.678,-97.677,-97.730,-97.342,-97.146,-96.467,-97.108,-96.797,-95.369)
+p_lat <- c( 29.424, 29.703, 29.883, 30.267, 30.508, 30.633, 31.117, 31.098, 31.549, 32.095, 32.735, 32.776, 29.760)
+library(sf)
+library(rmapshaper)
+
+fpptx_points <- st_read("J:/Shared drives/Policy & Research/Mobile Units/FPPTX.geojson", quiet = TRUE)
+
+library(readr)
+Rider_61_DAP_FY24_Report_final_xlsx_FPP_Providers_Fy24 <- read_csv("J:/Shared drives/Policy & Research/Mobile Units/Rider 61 DAP FY24 Report_final.xlsx - FPP Providers Fy24.csv")
+View(Rider_61_DAP_FY24_Report_final_xlsx_FPP_Providers_Fy24)
+
+fpptx_points <- cbind(fpptx_points, Rider_61_DAP_FY24_Report_final_xlsx_FPP_Providers_Fy24)
+
+# Replace with your shapefile path
+texas_roads <- st_read("J:/Shared drives/Policy & Research/Mobile Units/data/texas_roads_simple.geojson", quiet=TRUE)
+
+texas_roads_stfp <- st_read("J:/Shared drives/Policy & Research/Mobile Units/routesstfp.shp", quiet=TRUE)
+texas_roads <- st_transform(texas_roads, 4326)
+
+
+texas_WRA <- st_read("J:/Shared drives/Policy & Research/Mobile Units/FPPWRA100.geojson", quiet=TRUE)
+texas_WRA <- st_transform(texas_WRA, 4326)
+texas_WRA <- ms_simplify(texas_WRA, keep = 0.05, keep_shapes = TRUE)
+
+
+
+
+# Function to generate smooth points along linestring
+get_points_along <- function(route, n_points = 100){
+  coords <- st_coordinates(route)
+  dist <- cumsum(c(0, sqrt(diff(coords[,1])^2 + diff(coords[,2])^2)))
+  dist <- dist / max(dist)
+  
+  new_dist <- seq(0, 1, length.out = n_points)
+  new_x <- approx(dist, coords[,1], xout = new_dist)$y
+  new_y <- approx(dist, coords[,2], xout = new_dist)$y
+  
+  data.frame(lon = new_x, lat = new_y)
+}
+
+points_df <- get_points_along(texas_roads_stfp[1, ])
+
+
+
+
+```
+
+```{=html}
+
+<style>
+/* Target all tooltips globally */
+.leaflet-tooltip {
+  font-size: 18px !important;
+  font-weight: bold !important;
+  color: black !important;
+}
+</style>
+
+<style>
+
+body, .quarto-content {
+  margin: 0;
+  padding: 0;
+}
+
+</style>
+
+<style>
+
+/* Full-screen scroll container */
+#scrolly-container {
+  position: relative;
+  height: 1000vh; /* controls scroll length */
+  width: 100%;
+  left-margin: 1;
+  padding: 0;
+  z-index:10;
+}
+
+/* Make the map stick and fill the screen */
+#cr-map {
+  position: sticky;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+}
+
+/* Force Leaflet to fill its container */
+#cr-map .leaflet-container {
+  width: 100% !important;
+  height: 100vh !important;
+  z-index:0;
+  top:0;
+  }
+</style>
+
+
+
+<style>
+/* Add this to your existing CSS */
+#cr-steps {
+  position: relative;
+  z-index: 10;           /* text above map */
+  max-width: 50rem;      /* or adjust to your liking */
+  margin: 1 auto;        /* center horizontally */
+  padding-left: 1;       /* remove left padding */
+}
+
+.cr-step {
+  background: rgba(255, 255, 255, 0.85);
+  border-left: 4px solid #ddd;
+  border-radius: 6px;
+  margin: 50vh 0;
+  padding: 1rem;
+}
+.cr-step.is-active {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: #4a90e2;
+}
+
+
+.cr-step-wide {
+  background: rgba(255, 255, 255, 0.85);
+  border-left: 4px solid #ddd;
+  border-radius: 6px;
+  margin: 100vh 0;
+  padding: 0rem;
+  max-width: 80rem;
+}
+
+</style>
+
+<style>
+  /* Container ignores pointer events, so empty space is click-through */
+  #cr-steps { pointer-events: none; }
+
+  /* Actual step cards still clickable/selectable */
+  .cr-step, .cr-step-wide { pointer-events: auto; }
+
+  /* Optional: while a step is not the active one, make it transparent to clicks too */
+  .cr-step:not(.is-active), .cr-step-wide:not(.is-active) { pointer-events: none; }
+</style>
+
+
+```
+
+```{r}
+
+library(leaflet)
+library(htmlwidgets)
+library(htmltools)
+
+library(sf)
+library(leaflet)
+library(classInt)
+
+jenks_breaks <- classIntervals(texas_WRA$B13016_001, n = 5, style = "jenks")
+
+
+pal_tx <- colorNumeric("YlOrRd", texas_WRA$FPP.per.1000.WRA.)
+
+pal_tx_01 <- colorBin(
+  palette = "BuGn",                      # Blue to green
+  bins = jenks_breaks$brks,             # Jenks breaks
+  domain = texas_WRA$B13016_001,
+  na.color = "white"
+)
+
+m <- leaflet(height = "100%", width = "100%", options = leafletOptions(dragging = FALSE,maxZoom = 10, minZoom = 7)) |>
+  addProviderTiles("CartoDB.Positron") |>
+  setView(lng = center_lng, lat = center_lat, zoom = 7) |>
+  addPolygons(
+    data = texas_WRA,
+    group = "FPP.per.1000.WRA.",
+    fillColor = ~pal_tx(texas_WRA$FPP.per.1000.WRA.),
+    weight = 1, color = "white", fillOpacity = 0.6, stroke = TRUE,
+    highlightOptions = highlightOptions( # Define highlight options
+      weight = 5, opacity = 1, # Thicker border on hover 
+      color = "yellow"), # Bring the highlighted polygon to the front,
+    label = ~paste(" There are", texas_WRA$FPP.per.1000.WRA., "providers per 1000 women aged 15 to 49 in this county."))|>
+  addRectangles(lng1=a$west, lat1=a$south, lng2=a$east, lat2=a$north,
+                weight=5, color="#333", fillOpacity=0.00, group="Area") |>
+  
+   addPolygons(
+    data = texas_WRA,
+    group = "B13016_001",
+    fillColor = ~pal_tx_01(texas_WRA$B13016_001),
+    weight = 1, color = "white", fillOpacity = 0.6, stroke = TRUE,
+    highlightOptions = highlightOptions( # Define highlight options
+      weight = 5, opacity = 1, # Thicker border on hover 
+      color = "black"), # Bring the highlighted polygon to the front,
+    label = ~paste(" There are", texas_WRA$B13016_001, "women aged 15 to 49 in this county.")) |> 
+  
+addLegend(
+    pal = pal_tx_01,
+    values = texas_WRA$B13016_001,
+    title = "B13016_001 (Jenks)",
+    position = "bottomleft",
+    opacity = 0.7
+  ) |>
+  
+  addPolylines(
+    lng = line_lng, lat = line_lat,
+    color = "green",
+    weight = 4,
+    opacity = 0.9,
+    group = "Route"
+  ) |>
+  addPolylines(
+    data = texas_roads,
+    color = "black",
+    weight = 1,          # or 2–4 if it's too thick
+    opacity = 0.5,        # use opacity (not fillOpacity) for lines
+    group = "Texas Roads",
+    label = ~FULLNAME,
+    labelOptions = labelOptions(
+      noHide = FALSE,
+      style = list(
+        "font-size"  = "16px",
+        "font-weight"= "bold",
+        "color"      = "black"
+      )
+    )
+  )|>
+  
+    addPolylines(
+    data = texas_roads_stfp,
+    color = "cyan",
+    weight = 3,          # or 2–4 if it's too thick
+    opacity = 0.5,        # use opacity (not fillOpacity) for lines
+    group = "STFP",
+    label =  ~paste("There were", "INSERT VALUE", "served by South Texas Family Planning Corporation", "in",texas_roads_stfp$county,"in 2025 due to MHU services."),
+    labelOptions = labelOptions(
+      noHide = FALSE,
+      style = list(
+        "font-size"  = "16px",
+        "font-weight"= "bold",
+        "color"      = "black"
+      )
+    )
+  ) |>
+  
+  addCircleMarkers(data = fpptx_points,radius= 4, color = "darkred", stroke = FALSE, fillOpacity =  0.6, 
+                   group="Providers", label = ~fpptx_points$Provider.Name, popup ="Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.") |>
+  addLayersControl(overlayGroups = c("FPP.per.1000.WRA.","B13016_001","Area","Route","Units 2","Providers","Texas Roads", "STFP"),
+                   options = layersControlOptions(collapsed = FALSE)) |>
+    addCircleMarkers(lng=p_lng, lat=p_lat, radius=0, stroke=TRUE, fillOpacity=1,color = "darkred",
+                   group="FPP.per.1000.WRA.", popup ="totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt ex") |>
+    hideGroup("Units 2") |>
+  hideGroup("Texas Roads") |>
+  hideGroup("Route")|>
+  hideGroup("Area") |>
+  hideGroup("STFP") |>
+  hideGroup("STFP") |>
+  hideGroup("Providers")
+
+
+# Add van animation via onRender
+points_df <- get_points_along(texas_roads_stfp[1, ], n_points=200)
+js_points <- paste0("[", paste(apply(points_df, 1, function(r) paste0("[", r['lat'], ",", r['lon'], "]")), collapse=","), "]")
+van_url <- "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRXrGrn09EPK0AQc_-SSS6bYNkL57kve7b5A&s"
+
+m <- htmlwidgets::onRender(m, sprintf("
+function(el,x){
+  var map = this;
+  var vanIcon = L.icon({iconUrl: '%s', iconSize: [32,32], iconAnchor: [16,16]});
+  var marker = L.marker([%f,%f], {icon: vanIcon}).addTo(map);
+  var points = %s;
+  var i=0;
+  function moveMarker(){ if(i>=points.length) return; marker.setLatLng(points[i]); i++; setTimeout(moveMarker,50);}
+  moveMarker();
+}
+", van_url, points_df$lat[1], points_df$lon[1], js_points))
+
+
+
+m <-  htmlwidgets::onRender(m, "
+    function(el, x) {
+      var legend = el.querySelector('.leaflet-control .leaflet-control-legend');
+      if (legend) {
+        legend.style.marginLeft = '40px';  // Increase to push it out more
+        legend.style.marginBottom = '300px'; // Optional: add space from bottom
+      }
+    }
+  ")
+
+
+
+# force map to resize correctly when DOM settles
+
+m <- htmlwidgets::onRender(m, "
+function(el,x){
+  var map=this;
+  // expose for external scripts
+  window.txMap = map;
+
+  // existing resize kick
+  function kick(){ try{ map.invalidateSize(); }catch(e){} }
+  map.whenReady(function(){
+    kick(); setTimeout(kick,0); setTimeout(kick,250); setTimeout(kick,600);
+  });
+}
+")
+
+
+
+```
+
+```{=html}
+<div id="scrolly-container">
+  <div id="cr-map">
+    <!-- Inject leaflet map here -->
+    `r m`
+</div>
+
+  <div id="cr-steps">
+    <!-- Step 1 -->
+    <div class="cr-step" data-group="FPP.per.1000.WRA." data-lat="30.267" data-lng="-97.743" data-zoom="9">
+      <strong>Need for Services</strong>
+      <p>
+        INTRODUCTION: Across the 268,597 square miles of Texas, access to women’s healthcare is deeply uneven. Large regions of the state function as “care deserts,” where high- population communities have few or sometimes no access to nearby clinics providing essential services like contraception, cancer screenings and preventive care. ___(DATA?)____Underfunding, clinic closures, and restrictive and changing policies have widened these gaps, leaving low-income, rural, and underserved Texas facing long travel distances, limited transportation option, and months-long wait times. These barriers make timely, comprehensive healthcare out of reach for many, underscoring the urgent need for solutions that meet people where they are, that’s where mobile health care units come in.
+bmchealthservres.biomedcentral.com.
+      </p>
+    </div>
+    
+    <div class="cr-step" data-group="FPP.per.1000.WRA." data-lat="29.42" data-lng="-98.49" data-zoom="9">
+      <strong>San Antonio</strong>
+      <p>
+        Mobile health units matter because they collapse the distance between care and the people least likely to receive it..
+      </p>
+    </div>
+  
+      <div class="cr-step" data-group="FPP.per.1000.WRA." data-lat="30.26" data-lng="-97.74" data-zoom="9">
+      <strong>Austin</strong>
+      <p>
+        Mobile health units matter because they collapse the distance between care and the people least likely to receive it..
+      </p>
+    </div>
+    
+    <div class="cr-step" data-group="FPP.per.1000.WRA." data-lat="28.267" data-lng="-95.743" data-zoom="9">
+      <strong>Corpus Christi</strong>
+      <p>
+        Mobile health units matter because they collapse the distance between care and the people least likely to receive it..
+      </p>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="cr-step" data-group="Texas Roads" data-lat="27.8006" data-lng="-97.3964" data-zoom="11">
+      <strong>Access Matters</strong>
+      <p>
+        Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
+      </p>
+
+      <!-- Embed YouTube video -->
+      <div style="margin-top: 20px;">
+        <iframe width="500" height="315" 
+                src="https://www.youtube.com/embed/HeQ71Ssx7eo?autoplay=0" 
+                title="YouTube video player" 
+                frameborder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                allowfullscreen>
+        </iframe>
+      </div>
+    </div>
+    
+        <!-- Step 3 -->
+    <div class="cr-step" data-group="Units 2">
+      <strong>Step 3a — Route</strong>
+      <p>
+        Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
+        <br>
+                Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
+        </br>
+
+
+      </p>
+
+      <!-- Embed YouTube video -->
+      <div style="margin-top: 20px;">
+        <iframe width="500" height="315" 
+                src="https://www.youtube.com/embed/quKC48jc84s?autoplay=0" 
+                title="YouTube video player" 
+                frameborder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                allowfullscreen>
+        </iframe>
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div class="cr-step" data-group="Units 2" data-lat="31.267" data-lng="-96.743" data-zoom="11">
+      <strong>Step 4a — Points</strong>
+      
+<div class='tableauPlaceholder' id='viz1758342315647' style='position: relative'><noscript><a href='#'><img alt='Teen Birth Rate per 1,000, Texas, 1990 to 2023All Races&#47;Ethnicities ' src='https:&#47;&#47;public.tableau.com&#47;static&#47;images&#47;Te&#47;TexasTeenBirthsDataExplorer&#47;Trends&#47;1_rss.png' style='border: none' /></a></noscript><object class='tableauViz'  style='display:none;'><param name='host_url' value='https%3A%2F%2Fpublic.tableau.com%2F' /> <param name='embed_code_version' value='3' /> <param name='site_root' value='' /><param name='name' value='TexasTeenBirthsDataExplorer&#47;Trends' /><param name='tabs' value='no' /><param name='toolbar' value='yes' /><param name='static_image' value='https:&#47;&#47;public.tableau.com&#47;static&#47;images&#47;Te&#47;TexasTeenBirthsDataExplorer&#47;Trends&#47;1.png' /> <param name='animate_transition' value='yes' /><param name='display_static_image' value='yes' /><param name='display_spinner' value='yes' /><param name='display_overlay' value='yes' /><param name='display_count' value='yes' /><param name='language' value='en-US' /></object></div>                <script type='text/javascript'>                    var divElement = document.getElementById('viz1758342315647');                    var vizElement = divElement.getElementsByTagName('object')[0];                    vizElement.style.width='100%';vizElement.style.height=(divElement.offsetWidth*0.75)+'px';                    var scriptElement = document.createElement('script');                    scriptElement.src = 'https://public.tableau.com/javascripts/api/viz_v1.js';                    vizElement.parentNode.insertBefore(scriptElement, vizElement);                </script>
+      
+      
+      <p>
+        Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
+        
+      </p>
+    </div>
+  </div>
+</div>
+
+    <!-- Step 5 -->
+    <div class="cr-step" data-group="Providers">
+      <strong>Step 5a — Points</strong>
+      <p>
+        Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
+      </p>
+      
+  </div>
+</div>
+```
+
+```{=html}
+<br>
+<br>
+<br>
+
+<div class="closeread-container">
+  
+  <!-- Section 1 -->
+  <div class="cr-step">
+    <h2 id="section1">Section 1: Overview of Texas Counties</h2>
+    <p>Here we show the choropleth map of Texas counties with random example values.</p>
+    <p>
+    Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciun
+    </p>
+    
+  </div>
+
+  <!-- Section 2 -->
+  <div data-step="2">
+    <h2 id="section2">Section 2: Focus on Specific Areas</h2>
+    <p>Click the blue markers to navigate directly to sections for deeper insights.</p>
+  </div>
+
+<div class="fixed-hero">
+  <div class="box">
+    <h1>Mobile Units in Texas</h1>
+    <p class="kicker">Access, equity, and impact</p>
+  </div>
+</div>
+
+
+
+</div>
+```
+
+```{=html}
+
+<script>
+(function () {
+  const norm = s => (s || '').replace(/\s+/g,' ').trim();
+
+  function overlaysReady(){
+    return document.querySelectorAll('.leaflet-control-layers-overlays label').length > 0;
+  }
+  function stepsReady(){
+    return document.querySelectorAll('.cr-step[data-group]').length > 0;
+  }
+  function getOverlayMap(){
+    const map = new Map();
+    document.querySelectorAll('.leaflet-control-layers-overlays label')
+      .forEach(lbl => {
+        const name = norm(lbl.textContent);
+        const box  = lbl.querySelector('input[type="checkbox"]');
+        if (name && box) map.set(name, box);
+      });
+    return map;
+  }
+  function tick(group, overlayMap){
+    if (!group) return false;
+    const want = norm(group);
+    let box = overlayMap.get(want);
+    if (!box) {
+      // case-insensitive fallback
+      const gl = want.toLowerCase();
+      for (const [k,b] of overlayMap.entries()) if (k.toLowerCase() === gl) { box = b; break; }
+    }
+    if (box) { if (!box.checked) box.click(); return true; }
+    return false;
+  }
+
+  function wire(){
+    const steps = Array.from(document.querySelectorAll('.cr-step[data-group]'));
+    const overlayMap = getOverlayMap();
+    if (!steps.length || !overlayMap.size) return false;
+
+    let last = -1;
+    function revealUpTo(i){
+      if (i <= last) return;
+      for (let k = last + 1; k <= i; k++){
+        tick(steps[k].dataset.group, overlayMap);
+      }
+      last = Math.max(last, i);
+      window.dispatchEvent(new Event('resize'));
+    }
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const idx = steps.indexOf(entry.target);
+        steps.forEach((s,i)=>s.classList.toggle('is-active', i===idx));
+        revealUpTo(idx);
+      });
+    }, { threshold: 0.30, rootMargin: '-28% 0% -34% 0%' });
+
+    steps.forEach(s => io.observe(s));
+
+    setTimeout(() => {
+      const bandTop = innerHeight * 0.28, bandBot = innerHeight * 0.66;
+      let idx = -1;
+      for (let i=0;i<steps.length;i++){
+        const r = steps[i].getBoundingClientRect();
+        const c = (r.top + r.bottom)/2;
+        if (c >= bandTop && c <= bandBot) { idx = i; break; }
+        if (r.top <= bandBot) idx = i;
+      }
+      if (idx >= 0) revealUpTo(idx);
+    }, 0);
+
+    window._layersList = () => Array.from(overlayMap.keys());
+    window._revealAll  = () => revealUpTo(steps.length - 1);
+
+    return true;
+  }
+
+  function tryWire(){
+    if (overlaysReady() && stepsReady()) return wire();
+    return false;
+  }
+
+  if (!tryWire()){
+    const mo = new MutationObserver(() => { if (tryWire()) mo.disconnect(); });
+    mo.observe(document.body, { childList:true, subtree:true });
+  }
+})();
+</script>
+
+
+<script>
+(function(){
+  const parseBBox = (s) => {
+    if (!s) return null;
+    const a = s.split(',').map(Number);
+    if (a.length !== 4 || a.some(v => isNaN(v))) return null;
+    // Leaflet expects [[S,W],[N,E]]
+    return [[a[1], a[0]], [a[3], a[2]]];
+  };
+
+  function getMap(){
+    return window.txMap || null;
+  }
+
+  function zoomForStep(map, el){
+    if (!map || !el) return;
+
+    // Allow one-time behavior with data-zoom-once="true"
+    if (el.dataset.zoomOnce === 'true' && el._didZoom) return;
+
+    const bbox = parseBBox(el.dataset.bbox);
+    if (bbox){
+      map.fitBounds(bbox, {
+        paddingTopLeft:    [20, 90],  // leave room for your fixed title
+        paddingBottomRight:[20, 20],
+        animate: true
+      });
+      el._didZoom = true;
+      return;
+    }
+
+    const lat = parseFloat(el.dataset.lat);
+    const lng = parseFloat(el.dataset.lng);
+    const zm  = parseFloat(el.dataset.zoom || '8');
+
+    if (!isNaN(lat) && !isNaN(lng)){
+      map.flyTo([lat, lng], isNaN(zm) ? map.getZoom() : zm, {
+        animate: true,
+        duration: 1.0,    // seconds
+        easeLinearity: 0.25
+      });
+      el._didZoom = true;
+    }
+  }
+
+  function wire(){
+    const map = getMap();
+    const steps = Array.from(document.querySelectorAll('#cr-steps .cr-step, #cr-steps .cr-step-wide'));
+    if (!map || !steps.length) return false;
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        // When a step becomes active in the band, zoom to it
+        zoomForStep(map, entry.target);
+      });
+    }, { threshold: 0.30, rootMargin: '-28% 0% -34% 0%' });
+
+    steps.forEach(s => io.observe(s));
+
+    // Optional: on load, zoom to the first step that's already centered
+    setTimeout(() => {
+      const vhTop = innerHeight * 0.28, vhBot = innerHeight * 0.66;
+      for (const s of steps){
+        const r = s.getBoundingClientRect();
+        const c = (r.top + r.bottom)/2;
+        if (c >= vhTop && c <= vhBot){ zoomForStep(map, s); break; }
+      }
+    }, 0);
+
+    return true;
+  }
+
+  // Wait for map to be ready (onRender sets window.txMap)
+  if (!wire()){
+    const mo = new MutationObserver(() => { if (wire()) mo.disconnect(); });
+    mo.observe(document.body, { childList:true, subtree:true });
+  }
+})();
+</script>
+
+```
+
+```{r}
+library(htmlwidgets)
+library(leaflet)
+
+# Existing map: `m` (you already have it)
+# Generate points along your route
+points_df <- get_points_along(texas_roads_stfp[1, ], n_points = 200)
+
+# Convert points to JS array
+js_points <- paste0("[", paste(apply(points_df, 1, function(r) paste0("[", r['lat'], ",", r['lon'], "]")), collapse = ","), "]")
+
+van_url <- "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRXrGrn09EPK0AQc_-SSS6bYNkL57kve7b5A&s"
+
+# Inject JS animation
+m <- htmlwidgets::onRender(m, sprintf("
+function(el,x){
+  var map = this;
+
+  var vanIcon = L.icon({
+    iconUrl: '%s',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+  });
+
+  var marker = L.marker([%f, %f], {icon: vanIcon}).addTo(map);
+
+  var points = %s;
+  var i = 0;
+
+  function moveMarker() {
+    if(i >= points.length) return;
+    marker.setLatLng(points[i]);
+    i++;
+    setTimeout(moveMarker, 50);  // adjust speed
+  }
+
+  moveMarker();
+}
+", van_url, points_df$lat[1], points_df$lon[1], js_points))
+
+
+```
