@@ -1,0 +1,17 @@
+# Quarto/RStudio artifacts
+.quarto/
+_quarto/
+*_files/
+mediabag/
+_site/
+*.knit.md
+*.utf8.md
+*.html
+
+# R/RStudio
+.Rhistory
+.Rproj.user/
+
+# OS
+Thumbs.db
+.DS_Store
